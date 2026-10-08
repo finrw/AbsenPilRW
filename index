@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Absensi Kehadiran Pemilihan RW</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+* { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+body { background:#f4f6f9; margin:0; padding:15px; }
+.container { max-width:500px; margin:0 auto; }
+h2 { text-align:center; color:#1e293b; margin:0 0 15px; }
+.dashboard { display:flex; gap:10px; margin-bottom:15px; }
+.card { flex:1; background:#fff; padding:12px; border-radius:10px; text-align:center; box-shadow:0 2px 5px rgba(0,0,0,.05); }
+.card h3 { margin:0; font-size:20px; color:#2563eb; }
+.card p { margin:4px 0 0; font-size:11px; color:#64748b; font-weight:bold; }
+.card.hadir h3 { color:#16a34a; }
+.card.belum h3 { color:#dc2626; }
+.scanner-box { background:#fff; padding:12px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+#reader { width:100%; border-radius:8px; overflow:hidden; background:#000; min-height:260px; }
+#camMsg { text-align:center; font-size:13px; color:#64748b; margin-top:8px; }
+#resultBox { display:none; margin-top:15px; padding:15px; border-radius:10px; text-align:center; font-weight:bold; }
+.status-success { background:#dcfce7; color:#15803d; border:2px solid #86efac; }
+.status-already { background:#fef9c3; color:#a16207; border:2px solid #fde047; }
+.status-error { background:#fee2e2; color:#b91c1c; border:2px solid #fca5a5; }
+.warga-info { text-align:left; margin-top:10px; font-weight:normal; font-size:14px; line-height:1.5; }
+#retryBtn { display:none; margin:10px auto 0; padding:10px 16px; background:#2563eb; color:#fff; border:none; border-radius:6px; font-weight:bold; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h2>ABSENSI KEHADIRAN RW</h2>
+
+  <div class="dashboard">
+    <div class="card"><h3 id="statTotal">-</h3><p>TOTAL DPT</p></div>
+    <div class="card hadir"><h3 id="statHadir">-</h3><p>HADIR</p></div>
+    <div class="card belum"><h3 id="statBelum">-</h3><p>BELUM HADIR</p></div>
+  </div>
+
+  <div class="scanner-box">
+    <div id="reader"></div>
+    <div id="camMsg">Membuka kamera...</div>
+    <button id="retryBtn" onclick="startCamera()">Buka Kamera Lagi</button>
+  </div>
+
+  <div id="resultBox">
+    <div id="statusTitle" style="font-size:18px;"></div>
+    <div id="wargaDetails" class="warga-info"></div>
+  </div>
+</div>
+
+<script>
+// ====== ISI DUA NILAI INI ======
+const API_URL = 'https://script.google.com/macros/s/ISI_ID_DEPLOYMENT/exec';
+const API_KEY = 'GANTI-DENGAN-KUNCI-RAHASIA'; // harus sama dengan di Code.gs
+// ===============================
+
+let scanner = null;
+let isProcessing = false;
+let audioCtx = null;
+
+function beep(freq, dur) {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    osc.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + dur);
+  } catch (e) {}
+}
+
+async function api(params) {
+  const qs = new URLSearchParams(Object.assign({ key: API_KEY }, params)).toString();
+  const r = await fetch(API_URL + '?' + qs);
+  return r.json();
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function updateDashboard() {
+  try {
+    const res = await api({ action: 'stat' });
+    if (res && res.success) {
+      document.getElementById('statTotal').innerText = res.totalDpt;
+      document.getElementById('statHadir').innerText = res.totalHadir;
+      document.getElementById('statBelum').innerText = res.belumHadir;
+    }
+  } catch (e) {}
+}
+
+async function prosesToken(token) {
+  const resBox = document.getElementById('resultBox');
+  const title = document.getElementById('statusTitle');
+  const details = document.getElementById('wargaDetails');
+  resBox.style.display = 'block';
+  resBox.className = '';
+  title.innerText = 'Memeriksa Token...';
+  details.innerHTML = '';
+
+  try {
+    const res = await api({ action: 'scan', token: token });
+    const info =
+      '<strong>Nama:</strong> ' + esc(res.nama) + '<br>' +
+      '<strong>No. DPT:</strong> ' + esc(res.noDpt) + '<br>' +
+      '<strong>Blok / Rumah:</strong> ' + esc(res.blok) + '<br>';
+    if (res.success) {
+      beep(800, 0.15);
+      resBox.className = 'status-success';
+      title.innerText = '✅ ' + res.message;
+      details.innerHTML = info + '<strong>Waktu Hadir:</strong> ' + esc(res.waktu);
+      updateDashboard();
+    } else if (res.already) {
+      beep(400, 0.35);
+      resBox.className = 'status-already';
+      title.innerText = '⚠️ ' + res.message;
+      details.innerHTML = info + '<strong>Waktu Absen:</strong> ' + esc(res.waktu);
+    } else {
+      beep(250, 0.4);
+      resBox.className = 'status-error';
+      title.innerText = '❌ ' + res.message;
+    }
+  } catch (err) {
+    resBox.className = 'status-error';
+    title.innerText = '❌ Gagal terhubung ke server: ' + err.message;
+  }
+  setTimeout(() => { isProcessing = false; }, 2500);
+}
+
+function onScanSuccess(text) {
+  if (isProcessing) return;
+  isProcessing = true;
+  prosesToken(text);
+}
+
+async function startCamera() {
+  const msg = document.getElementById('camMsg');
+  const retry = document.getElementById('retryBtn');
+  retry.style.display = 'none';
+  msg.innerText = 'Membuka kamera...';
+  try {
+    if (!scanner) scanner = new Html5Qrcode('reader');
+    if (scanner.isScanning) await scanner.stop();
+    await scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 240, height: 240 } },
+      onScanSuccess,
+      () => {}
+    );
+    msg.innerText = 'Arahkan kamera ke QR Code peserta';
+  } catch (err) {
+    msg.innerText = 'Kamera tidak bisa dibuka. Izinkan akses kamera di browser, lalu coba lagi.';
+    retry.style.display = 'block';
+  }
+}
+
+window.onload = function () {
+  updateDashboard();
+  setInterval(updateDashboard, 15000);
+  startCamera();
+};
+</script>
+</body>
+</html>
+
