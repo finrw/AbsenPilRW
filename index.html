@@ -24,12 +24,23 @@ h2 { text-align:center; color:#1e293b; margin:0 0 15px; }
 .status-already { background:#fef9c3; color:#a16207; border:2px solid #fde047; }
 .status-error { background:#fee2e2; color:#b91c1c; border:2px solid #fca5a5; }
 .warga-info { text-align:left; margin-top:10px; font-weight:normal; font-size:14px; line-height:1.5; }
+.list-box { background:#fff; margin-top:15px; padding:12px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+.list-box h4 { margin:0 0 8px; color:#1e293b; font-size:15px; }
+.tabs { display:flex; gap:6px; margin-bottom:8px; }
+.tab { flex:1; padding:9px; border:none; border-radius:6px; background:#e2e8f0; color:#334155; font-weight:bold; font-size:13px; }
+.tab.active { background:#2563eb; color:#fff; }
+#listSearch { width:100%; padding:9px; border:1px solid #cbd5e1; border-radius:6px; margin-bottom:8px; }
+.list-item { display:flex; justify-content:space-between; gap:8px; padding:8px 0; border-top:1px solid #e2e8f0; font-size:13px; }
+.list-item .nm { font-weight:bold; color:#0f172a; }
+.list-item .sub { color:#64748b; font-size:12px; }
+.list-item .tm { color:#16a34a; font-size:12px; white-space:nowrap; }
+#listEmpty { color:#94a3b8; font-size:13px; text-align:center; padding:10px 0; }
 #retryBtn { display:none; margin:10px auto 0; padding:10px 16px; background:#2563eb; color:#fff; border:none; border-radius:6px; font-weight:bold; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h2>ABSENSI KEHADIRAN RW</h2>
+  <h2>ABSENSI KEHADIRAN PEMILIHAN RW</h2>
 
   <div class="dashboard">
     <div class="card"><h3 id="statTotal">-</h3><p>TOTAL DPT</p></div>
@@ -43,6 +54,16 @@ h2 { text-align:center; color:#1e293b; margin:0 0 15px; }
     <button id="retryBtn" onclick="startCamera()">Buka Kamera Lagi</button>
   </div>
 
+  <div class="list-box">
+    <div class="tabs">
+      <button class="tab active" id="tabHadir" onclick="setTab('hadir')">Hadir (<span id="cntHadir">0</span>)</button>
+      <button class="tab" id="tabBelum" onclick="setTab('belum')">Belum Hadir (<span id="cntBelum">0</span>)</button>
+    </div>
+    <input type="text" id="listSearch" placeholder="Cari nama / blok..." oninput="renderList()">
+    <div id="listItems"></div>
+    <div id="listEmpty">Tidak ada data</div>
+  </div>
+
   <div id="resultBox">
     <div id="statusTitle" style="font-size:18px;"></div>
     <div id="wargaDetails" class="warga-info"></div>
@@ -52,7 +73,7 @@ h2 { text-align:center; color:#1e293b; margin:0 0 15px; }
 <script>
 // ====== ISI DUA NILAI INI ======
 const API_URL = 'https://script.google.com/macros/s/AKfycbyQPHuCzSl4h4zDhRhOzXXZUn4e9CFjFzHXXD3kIX3UwqP86XtgJULHf2tjP1Cy7Zxs/exec';
-const API_KEY = 'Kkgsydjg6358-hdowu88&$hdgsk-7ghnsj'; // harus sama dengan di Code.gs
+const API_KEY = 'HDFlhgkyfcsj_jgkFDJ88-gdwsp,kihjbe$=2880'; // harus sama dengan di Code.gs
 // ===============================
 
 let scanner = null;
@@ -90,6 +111,41 @@ async function updateDashboard() {
       document.getElementById('statBelum').innerText = res.belumHadir;
     }
   } catch (e) {}
+  loadList();
+}
+
+let daftar = { hadir: [], belum: [] };
+let activeTab = 'hadir';
+
+async function loadList() {
+  try {
+    const res = await api({ action: 'list' });
+    if (res && res.success) {
+      daftar = { hadir: res.hadir || [], belum: res.belum || [] };
+      renderList();
+    }
+  } catch (e) {}
+}
+
+function setTab(t) {
+  activeTab = t;
+  document.getElementById('tabHadir').className = 'tab' + (t === 'hadir' ? ' active' : '');
+  document.getElementById('tabBelum').className = 'tab' + (t === 'belum' ? ' active' : '');
+  renderList();
+}
+
+function renderList() {
+  const q = document.getElementById('listSearch').value.trim().toLowerCase();
+  const rows = daftar[activeTab].filter(x =>
+    !q || String(x.nama).toLowerCase().includes(q) || String(x.blok).toLowerCase().includes(q));
+  document.getElementById('cntHadir').innerText = daftar.hadir.length;
+  document.getElementById('cntBelum').innerText = daftar.belum.length;
+  document.getElementById('listEmpty').style.display = rows.length ? 'none' : 'block';
+  document.getElementById('listItems').innerHTML = rows.map(x =>
+    '<div class="list-item"><div><div class="nm">' + esc(x.nama) + '</div>' +
+    '<div class="sub">DPT ' + esc(x.noDpt) + ' &bull; ' + esc(x.blok) + '</div></div>' +
+    (x.waktu ? '<div class="tm">' + esc(String(x.waktu).split(' ')[1] || x.waktu) + '</div>' : '') +
+    '</div>').join('');
 }
 
 async function prosesToken(token) {
