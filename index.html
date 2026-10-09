@@ -40,7 +40,7 @@ h2 { text-align:center; color:#1e293b; margin:0 0 15px; }
 </head>
 <body>
 <div class="container">
-  <h2>ABSENSI KEHADIRAN PEMILIHAN RW</h2>
+  <h2>ABSENSI KEHADIRAN RW</h2>
 
   <div class="dashboard">
     <div class="card"><h3 id="statTotal">-</h3><p>TOTAL DPT</p></div>
@@ -144,7 +144,7 @@ function renderList() {
   document.getElementById('listItems').innerHTML = rows.map(x =>
     '<div class="list-item"><div><div class="nm">' + esc(x.nama) + '</div>' +
     '<div class="sub">DPT ' + esc(x.noDpt) + ' &bull; ' + esc(x.blok) + '</div></div>' +
-    (x.waktu ? '<div class="tm">' + esc(String(x.waktu).split(' ')[1] || x.waktu) + '</div>' : '') +
+    (x.waktu ? '<div class="tm">' + esc((String(x.waktu).match(/\d{2}:\d{2}(:\d{2})?/) || [x.waktu])[0]) + '</div>' : '') +
     '</div>').join('');
 }
 
@@ -221,4 +221,3 @@ window.onload = function () {
 </script>
 </body>
 </html>
-
